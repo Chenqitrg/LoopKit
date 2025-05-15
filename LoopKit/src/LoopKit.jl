@@ -289,13 +289,14 @@ export coarse_grain_TRG, entanglement_filtering, loop
     """
     Optimizing a single local S-tensor
     """
-    function opt_S(N, W)
+    function opt_S(N, W, S)
         function apply_f(x)
             @planar Npsi[l u r] := N[ld r; rd l] * x[rd u ld]
             return Npsi
         end
 
-        new_S, info = linsolve(apply_f, W)
+        new_S, info = linsolve(apply_f, W, S; krylovdim=10, maxiter=100, tol=1e-10,
+                           verbosity=0)
         return new_S
     end
 
@@ -308,11 +309,11 @@ export coarse_grain_TRG, entanglement_filtering, loop
             cost = cost_function(loop_TT_array, loop_TSS_array, loop_SS_array)
             ratio = abs(lastcost - cost)/abs(lastcost)
             println("n_sweep: $n, cost = $cost, relative_descend = $ratio")
-            if (ratio > relative_descend) && (abs(cost) > absolute_error)
+            if (ratio > relative_descend) || (abs(cost) > absolute_error)
                 for S_site = 1:8
                     N = to_N(loop_S_array, loop_SS_array, S_site)
                     W = to_W(loop_T_array, loop_S_array, loop_TSS_array, S_site)
-                    loop_S_array[S_site] = opt_S(N, W)
+                    loop_S_array[S_site] = opt_S(N, W, loop_S_array[S_site])
                     @planar SS[ld lu; rd ru] := loop_S_array[S_site][ld u rd] * loop_S_array[S_site]'[(); lu u ru]
                     loop_SS_array[S_site] = SS
                     T_site = to_T_site(S_site)
