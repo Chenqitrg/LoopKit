@@ -8,5 +8,5 @@ KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 TensorKit = "07d1fe3e-3e46-537d-9eac-e9e13d0d4cec"
 
 [compat]
-KrylovKit = "0.9.5"
-TensorKit = "0.14.6"
+KrylovKit = "0"
+TensorKit = "0"
