@@ -6,8 +6,11 @@ using KrylovKit
 export coarse_grain_TRG, entanglement_filtering, loop
 
     """
+    coarse_grain_TRG(TA, TB, Dcut::Int)
+
     Performing the usual Levin-Nave TRG.
-    Dcut: dimension of cutoff
+
+    - Dcut: dimension of cutoff
     """
     function coarse_grain_TRG(TA, TB, Dcut::Int)
         Tludr = transpose(TA, (1,2),(4,3))
@@ -28,19 +31,25 @@ export coarse_grain_TRG, entanglement_filtering, loop
 
 
     """
+
+    entanglement_filtering(A, B; N_ef::Int = 5, epsilon::Float64 = 1e-12)
+
+
     Perform the entanglement filtering.
-    N_ef: total loops for entanglement_filtering.
-    epsilon: cutoff when obtaining the projector.
+
+    - N_ef: total loops for entanglement_filtering.
+
+    - epsilon: cutoff when obtaining the projector.
 
     The leg of the initial local tensor are in the following direction
                 |
                 ^
                 |
-                2
+                u
                 |
-     ----<--1---T---3--<----
+     ----<--l---T---r--<----
                 |
-                4
+                d
                 |
                 ^
                 |
@@ -97,24 +106,24 @@ export coarse_grain_TRG, entanglement_filtering, loop
     end
 
     """
-    |          |
-    ^          v
-    |          |
-    L          R
-    |          |
-    \\       /     
-      ------
+    |           |
+    ^           v
+    |           |
+    L           R
+    |           |
+    |           | 
+    ------S------  
     =
     |           |
     ^           v
     |           |
     U           V
     |           |
-    \\        /     
-      ---S---   
+    |           | 
+    ------S------   
     """
     function to_projector(L, R, epsilon::Float64)
-    @planar LR[a; b] := L[a; c] * R[b; c]
+        @planar LR[a; b] := L[a; c] * R[b; c]
         U, S, V = tsvd(LR; trunc = truncerr(epsilon))
         @planar PR[a; b] := R[c; a] * V'[c;d] * inv(sqrt(S))[d; b]
         @planar PL[a; b] := inv(sqrt(S))[b; d] * L[c; a] * U'[d;c]
@@ -125,38 +134,7 @@ export coarse_grain_TRG, entanglement_filtering, loop
     nextS(i::Int) = mod(i,8)+1
     last(i::Int) = mod(i-2,4)+1
 
-    function to_T_site(S_site)
-        T_site = 0
-        if S_site in (1, 2)
-            T_site = 1
-        elseif S_site in (3, 4)
-            T_site = 2
-        elseif S_site in (5, 6)
-            T_site = 3
-        elseif S_site in (7, 8)
-            T_site = 4
-        end
-
-        return T_site
-    end
-
-
-
-    function svd_init(A, B, Dcut::Int)
-        transpA = transpose(A, (1,2), (4,3))
-        transpB = transpose(B, (2,3), (1,4))
-        T1, S1, T2, error1 = tsvd(transpA; trunc = truncdim(Dcut))
-        T3, S2, T4, error2 = tsvd(transpB; trunc = truncdim(Dcut))
-        println("error1 = $error1, error2 = $error2")
-        @planar begin
-        T1[1 2; md] = T1[1 2; c] * sqrt(S1)[c; md]
-        T2[md; 4 3] = sqrt(S1)[md; c] * T2[c; 4 3]
-        T3[2 3; md] = T3[2 3; c] * sqrt(S2)[c; md]
-        T4[md; 1 4] = sqrt(S2)[md; c] * T4[c; 1 4]
-        end
-
-        return T1, T2, T3, T4
-    end
+    to_T_site(S_site::Int) = (S_site-1)÷2 + 1
 
     function to_T_array(A, B)
         loop_T_array = Vector(undef, 4)
@@ -175,7 +153,6 @@ export coarse_grain_TRG, entanglement_filtering, loop
             U, S, V, eps = tsvd(temp; trunc = truncdim(D_cut))
             @planar loop_S_array[2*site_T-1][1 2 3] := U[1 2; md] * sqrt(S)[md; 3]
             @planar loop_S_array[2*site_T][1 2 3] := sqrt(S)[1; md] * V[md; 3 2]
-
         end
 
         return loop_S_array
@@ -217,7 +194,7 @@ export coarse_grain_TRG, entanglement_filtering, loop
     end
 
     """
-    Calculating the cost function.
+    Calculating the relative cost function.
     """
     function cost_function(loop_TT_array, loop_TSS_array, loop_SS_array)
         numTT = to_number(loop_TT_array)
@@ -226,9 +203,41 @@ export coarse_grain_TRG, entanglement_filtering, loop
         return (numTT + numSS - numTSS - conj(numTSS))/numTT
     end
 
+    function single_loop_initialization!(loop_S_array; epsilon = 1e-12)
+        type = eltype(loop_S_array[1])
+        L = Vector(undef, 8)
+        R = Vector(undef, 8)
+        for i in 1:8
+            L[i] = id(type, space(loop_S_array[i],1))
+            R[i] = id(type, space(loop_S_array[i],3))
+        end
+
+        for il in 1:8
+            @planar LT[1 2 3] := L[il][1; a] * loop_S_array[il][a 2 3]
+            temp = transpose(LT, (1,2), (3,))
+            _, L[next(il)] = leftorth(temp,)
+        end
+        L[1] = L[1] / norm(L[1],Inf)
+        for ir in reverse(1:8)
+            @planar TR[1 2 3] := loop_S_array[ir][1 2 a] * R[ir][3; a]
+            temp = transpose(TR, (2,3), (1,))
+            _, R[last(ir)] = leftorth(temp,)
+        end
+        R[8] = R[8] / norm(R[8],Inf)
+
+        PR = Vector(undef, 8)
+        PL = Vector(undef, 8)
+
+        for i in 1:8
+            PR[last(i)], PL[i] = to_projector(L[i], R[last(i)], epsilon)
+            @planar loop_S_array[i][l u r] := PL[i][ll; l] * loop_S_array[i][ll u rr] * PR[i][rr; r]
+        end
+    end
+
     function loop_initialization(A, B, D_cut::Int)
         loop_T = to_T_array(A, B)
         loop_S = to_S_array(loop_T, D_cut)
+        single_loop_initialization!(loop_S)
         loop_TT = to_TT_array(loop_T)
         loop_SS = to_SS_array(loop_S)
         loop_TSS = to_TSS_array(loop_T, loop_S)
@@ -255,30 +264,30 @@ export coarse_grain_TRG, entanglement_filtering, loop
         TSS = loop_TSS_array[site]
         for i = 1:2
             site = next(site)
-            @planar T[ld lu; rd ru] := TSS[ld lu; md mu] * loop_TSS_array[site][md mu; rd ru]
-            TSS = T
+            @planar temp[ld lu; rd ru] := TSS[ld lu; md mu] * loop_TSS_array[site][md mu; rd ru]
+            TSS = temp
         end
 
         if S_site in (2, 4, 6, 8)
             S_site_comp = S_site - 1
             @planar TS[ld lu; rd r ru] := loop_T_array[T_site][ld l r rd] * loop_S_array[S_site_comp]'[(); lu l ru]
-            #---4-S†-5---
-            #     |   
-            #     |   |
-            #     |   1
-            #      \ /     
-            #----3--T--2----
+            #---lu-S†-ru---
+            #      |   
+            #      |   |
+            #      l   r
+            #       \ /     
+            #---ld---T--rd----
             @planar W[l u r] := TS[ld lu; md u l] * TSS[md r; ld lu]
             
         elseif S_site in (1, 3, 5, 7)
             S_site_comp = S_site + 1
             @planar TS[ld l lu; rd ru] := loop_T_array[T_site][ld l r rd] * loop_S_array[S_site_comp]'[(); lu r ru]
-            #    ---4-S†-5--
-            #         |   
-            #     |   |
-            #     3   |
-            #      \ /     
-            #----2--T--1----
+            #    ---lu-S†-ru--
+            #          |   
+            #      |   |
+            #      l   r
+            #       \ /     
+            #----ld--T--rd----
             @planar W[l u r] := TS[ld u r; md mu] * TSS[md mu; ld l]
 
         end
@@ -295,13 +304,12 @@ export coarse_grain_TRG, entanglement_filtering, loop
             return Npsi
         end
 
-        new_S, info = linsolve(apply_f, W, S; krylovdim=10, maxiter=100, tol=1e-10,
-                           verbosity=0)
+        new_S, info = linsolve(apply_f, W, S; krylovdim=10, maxiter=100, tol=1e-10, verbosity=0)
         return new_S
     end
 
     """
-    The optimization step of Loop-TNR, changing local tensors in a loop such that the cost in a loop is minimized.
+    The optimization step of Loop-TNR, changing local tensors in a loop such that the cost is minimized.
     """
     function sweep!(loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array, N_sweep::Int, relative_descend::Float64, absolute_error::Float64)
         lastcost = 0.
@@ -337,11 +345,14 @@ export coarse_grain_TRG, entanglement_filtering, loop
     end
 
     """
+    loop(A, B, Dcut::Int, N_sweep::Int; relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
+
     Perform a single step of Loop-TNR.
-    Dcut: cutoff
-    N_sweep: maximal number of sweeps of the loop
-    relative_descend: when the relative relative descend of error is smaller than the given one, quit the sweep
-    absolute_error: when the absolute_error is smaller than the given one, quit the sweep
+
+    - Dcut: cutoff
+    - N_sweep: maximal number of sweeps of the loop
+    - relative_descend: when the relative relative descend of error is smaller than the given one, quit the sweep
+    - absolute_error: when the absolute_error is smaller than the given one, quit the sweep
     
     return: next A, B
     """
