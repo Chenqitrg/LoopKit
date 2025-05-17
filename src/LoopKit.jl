@@ -319,9 +319,9 @@ export coarse_grain_TRG, entanglement_filtering, loop
     """
     The optimization step of Loop-TNR, changing local tensors in a loop such that the cost is minimized.
     """
-    function sweep!(loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array, N_sweep::Int, relative_descend::Float64, absolute_error::Float64)
+    function sweep!(loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array, N_sweep_max::Int, relative_descend::Float64, absolute_error::Float64)
         lastcost = 0.
-        for n = 1:N_sweep
+        for n = 1:N_sweep_max
             cost = cost_function(loop_TT_array, loop_TSS_array, loop_SS_array)
             ratio = abs(lastcost - cost)/abs(lastcost)
             println("n_sweep: $n, cost = $cost, relative_descend = $ratio")
@@ -364,9 +364,9 @@ export coarse_grain_TRG, entanglement_filtering, loop
     
     return: next A, B
     """
-    function loop(A, B, Dcut::Int, N_sweep::Int; entanglement_filtering_init=true, relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
+    function loop(A, B, Dcut::Int; N_sweep_max = 20, entanglement_filtering_init=true, relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
         loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array = loop_initialization(A, B, Dcut, entanglement_filtering_init)
-        sweep!(loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array, N_sweep, relative_descend, absolute_error)
+        sweep!(loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array, N_sweep_max, relative_descend, absolute_error)
         return coares_grain(loop_S_array)
     end
 
