@@ -131,8 +131,10 @@ export coarse_grain_TRG, entanglement_filtering, loop
     end
 
     next(i::Int) = mod(i,4)+1
-    nextS(i::Int) = mod(i,8)+1
     last(i::Int) = mod(i-2,4)+1
+    nextS(i::Int) = mod(i,8)+1
+    lastS(i::Int) = mod(i-2,8)+1
+
 
     to_T_site(S_site::Int) = (S_site-1)÷2 + 1
 
@@ -215,13 +217,13 @@ export coarse_grain_TRG, entanglement_filtering, loop
         for il in 1:8
             @planar LT[1 2 3] := L[il][1; a] * loop_S_array[il][a 2 3]
             temp = transpose(LT, (1,2), (3,))
-            _, L[next(il)] = leftorth(temp,)
+            _, L[nextS(il)] = leftorth(temp,)
         end
         L[1] = L[1] / norm(L[1],Inf)
         for ir in reverse(1:8)
             @planar TR[1 2 3] := loop_S_array[ir][1 2 a] * R[ir][3; a]
             temp = transpose(TR, (2,3), (1,))
-            _, R[last(ir)] = leftorth(temp,)
+            _, R[lastS(ir)] = leftorth(temp,)
         end
         R[8] = R[8] / norm(R[8],Inf)
 
@@ -229,15 +231,21 @@ export coarse_grain_TRG, entanglement_filtering, loop
         PL = Vector(undef, 8)
 
         for i in 1:8
-            PR[last(i)], PL[i] = to_projector(L[i], R[last(i)], epsilon)
-            @planar loop_S_array[i][l u r] := PL[i][ll; l] * loop_S_array[i][ll u rr] * PR[i][rr; r]
+            PR[lastS(i)], PL[i] = to_projector(L[i], R[lastS(i)], epsilon)
+        end
+
+        for i in 1:8
+            @planar temp[l u r] := PL[i][ll; l] * loop_S_array[i][ll u rr] * PR[i][rr; r]
+            loop_S_array[i] = temp
         end
     end
 
-    function loop_initialization(A, B, D_cut::Int)
+    function loop_initialization(A, B, D_cut::Int, entanglement_filtering_init)
         loop_T = to_T_array(A, B)
         loop_S = to_S_array(loop_T, D_cut)
-        single_loop_initialization!(loop_S)
+        if entanglement_filtering_init
+            single_loop_initialization!(loop_S)
+        end
         loop_TT = to_TT_array(loop_T)
         loop_SS = to_SS_array(loop_S)
         loop_TSS = to_TSS_array(loop_T, loop_S)
@@ -317,7 +325,7 @@ export coarse_grain_TRG, entanglement_filtering, loop
             cost = cost_function(loop_TT_array, loop_TSS_array, loop_SS_array)
             ratio = abs(lastcost - cost)/abs(lastcost)
             println("n_sweep: $n, cost = $cost, relative_descend = $ratio")
-            if (ratio > relative_descend) || (abs(cost) > absolute_error)
+            if (ratio > relative_descend) && (abs(cost) > absolute_error)
                 for S_site = 1:8
                     N = to_N(loop_S_array, loop_SS_array, S_site)
                     W = to_W(loop_T_array, loop_S_array, loop_TSS_array, S_site)
@@ -345,7 +353,7 @@ export coarse_grain_TRG, entanglement_filtering, loop
     end
 
     """
-    loop(A, B, Dcut::Int, N_sweep::Int; relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
+        loop(A, B, Dcut::Int, N_sweep::Int; entanglement_filtering_init = true, relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
 
     Perform a single step of Loop-TNR.
 
@@ -356,8 +364,8 @@ export coarse_grain_TRG, entanglement_filtering, loop
     
     return: next A, B
     """
-    function loop(A, B, Dcut::Int, N_sweep::Int; relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
-        loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array = loop_initialization(A, B, Dcut)
+    function loop(A, B, Dcut::Int, N_sweep::Int; entanglement_filtering_init=true, relative_descend::Float64 = 0.02, absolute_error::Float64 = 1e-8)
+        loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array = loop_initialization(A, B, Dcut, entanglement_filtering_init)
         sweep!(loop_T_array, loop_S_array, loop_TT_array, loop_SS_array, loop_TSS_array, N_sweep, relative_descend, absolute_error)
         return coares_grain(loop_S_array)
     end
