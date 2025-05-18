@@ -6,7 +6,10 @@ version = "0.1.0"
 [deps]
 KrylovKit = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
 TensorKit = "07d1fe3e-3e46-537d-9eac-e9e13d0d4cec"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+
 
 [compat]
 KrylovKit = "0"
 TensorKit = "0"
+JLD2 = "0"
