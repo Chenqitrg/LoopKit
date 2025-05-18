@@ -2,6 +2,7 @@ module LoopKit
 
 using TensorKit
 using KrylovKit
+using JLD2
 
 export coarse_grain_TRG, entanglement_filtering, loop
 
@@ -152,7 +153,7 @@ export coarse_grain_TRG, entanglement_filtering, loop
 
         for site_T = 1:4
             temp = transpose(loop_T_array[site_T], (1, 2), (4, 3))
-            U, S, V, eps = tsvd(temp; trunc = truncdim(D_cut))
+            U, S, V, eps = tsvd(temp; trunc = truncdim(D_cut), alg = TensorKit.SVD())
             @planar loop_S_array[2*site_T-1][1 2 3] := U[1 2; md] * sqrt(S)[md; 3]
             @planar loop_S_array[2*site_T][1 2 3] := sqrt(S)[1; md] * V[md; 3 2]
         end
